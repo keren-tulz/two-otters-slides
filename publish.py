@@ -97,12 +97,25 @@ def publish(post):
     return media_id
 
 
+def describe_token():
+    """Say enough about the stored token to spot a wrong paste, and no more.
+
+    Length and prefix are enough to tell an Instagram token from an app secret or
+    a half-copied string. The value itself is never printed.
+    """
+    kind = "looks like an Instagram login token" if TOKEN.startswith("IG") else \
+           "does NOT start with IG, so it is probably not an Instagram login token"
+    print(f"IG_USER_ID is {len(USER)} characters, starts with {USER[:4]}")
+    print(f"IG_TOKEN is {len(TOKEN)} characters and {kind}")
+
+
 def check():
     """Prove the whole path works without putting anything on the profile.
 
     Containers are staged and then simply abandoned; Meta drops an unpublished
     container after 24 hours, and nothing appears on the account in the meantime.
     """
+    describe_token()
     me = call("GET", USER, fields="id,username,account_type")
     print(f"token works: @{me.get('username')} ({me.get('account_type')})")
 
@@ -150,8 +163,10 @@ def refresh_token():
 
 
 if __name__ == "__main__":
-    USER = os.environ["IG_USER_ID"]
-    TOKEN = os.environ["IG_TOKEN"]
+    # A secret pasted into GitHub keeps whatever whitespace came with it, and a
+    # stray newline is enough for Meta to answer "cannot parse access token".
+    USER = os.environ["IG_USER_ID"].strip()
+    TOKEN = os.environ["IG_TOKEN"].strip()
 
     if len(sys.argv) > 1 and sys.argv[1] == "--refresh":
         refresh_token()
