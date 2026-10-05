@@ -98,16 +98,26 @@ def publish(post):
 
 
 def refresh_token():
-    """Extend the 60 day token. Prints the new one so the workflow can store it."""
-    r = call("GET", "refresh_access_token", grant_type="ig_refresh_token")
-    days = int(r.get("expires_in", 0)) // 86400
+    """Extend the 60 day token.
+
+    The new token goes to a file rather than to stdout, so it never lands in a
+    workflow log. The workflow pipes that file into `gh secret set` and deletes it.
+    """
+    body = urllib.parse.urlencode({"grant_type": "ig_refresh_token",
+                                   "access_token": TOKEN})
+    req = urllib.request.Request(
+        f"https://graph.instagram.com/refresh_access_token?{body}")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            fresh = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"refresh failed {e.code}\n{e.read().decode()[:400]}")
+
+    days = int(fresh.get("expires_in", 0)) // 86400
+    out = HERE / ".new_token"
+    out.write_text(fresh["access_token"])
+    out.chmod(0o600)
     print(f"token refreshed, valid for another {days} days")
-    print(f"::add-mask::{r['access_token']}")
-    out = os.environ.get("GITHUB_OUTPUT")
-    if out:
-        with open(out, "a") as f:
-            f.write(f"token={r['access_token']}\ndays={days}\n")
-    return r["access_token"]
 
 
 if __name__ == "__main__":

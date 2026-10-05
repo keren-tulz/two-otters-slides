@@ -52,23 +52,17 @@ jobs:
       # Storing the new one needs a token that may write secrets, so this step is
       # skipped when GH_PAT is not set and the run just says so.
       - name: Keep the token alive
-        id: refresh
         if: always()
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
-        run: python3 publish.py --refresh
-
-      - name: Store the refreshed token
-        if: always() && steps.refresh.outputs.token != ''
-        env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          NEW_TOKEN: ${{ steps.refresh.outputs.token }}
         run: |
+          python3 publish.py --refresh
           if [ -z "$GH_TOKEN" ]; then
-            echo "No GH_PAT secret, so the token cannot be stored automatically."
-            echo "It stays valid for ${{ steps.refresh.outputs.days }} more days."
-            exit 0
+            echo "No GH_PAT secret, so the refreshed token cannot be stored."
+            echo "Replace IG_TOKEN by hand before the days above run out."
+          else
+            gh secret set IG_TOKEN < .new_token && echo "IG_TOKEN updated."
           fi
-          printf '%s' "$NEW_TOKEN" | gh secret set IG_TOKEN --body-file -
-          echo "IG_TOKEN updated."
+          rm -f .new_token
