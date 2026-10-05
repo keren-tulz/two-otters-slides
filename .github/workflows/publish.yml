@@ -1,0 +1,74 @@
+name: Publish the scheduled carousel
+
+# Runs on GitHub's servers, so nothing has to be open on anyone's machine.
+# It fires every day and publish.py decides whether anything is actually due,
+# which means a day that fails is simply picked up by the next run.
+on:
+  schedule:
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+    inputs:
+      post:
+        description: "Force one post number, e.g. 4. Leave empty to publish whatever is due."
+        required: false
+
+permissions:
+  contents: write               # so the run can commit published.json back
+
+concurrency:
+  group: instagram-publish      # never two runs posting at once
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          # kept out of the command line: an input must never be interpolated into `run`
+          FORCE_POST: ${{ github.event.inputs.post }}
+        run: |
+          case "$FORCE_POST" in
+            ""|[0-9]|[0-9][0-9]) ;;
+            *) echo "post must be a number"; exit 1 ;;
+          esac
+          python3 publish.py $FORCE_POST
+
+      - name: Record what went out
+        run: |
+          if [ -n "$(git status --porcelain published.json)" ]; then
+            git config user.name "two-otters-bot"
+            git config user.email "noreply@github.com"
+            git add published.json
+            git commit -m "Published $(date -u +%F)"
+            git push
+          fi
+
+      # The Instagram token lasts 60 days and refreshing it resets the clock.
+      # Storing the new one needs a token that may write secrets, so this step is
+      # skipped when GH_PAT is not set and the run just says so.
+      - name: Keep the token alive
+        id: refresh
+        if: always()
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+        run: python3 publish.py --refresh
+
+      - name: Store the refreshed token
+        if: always() && steps.refresh.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_TOKEN: ${{ steps.refresh.outputs.token }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "No GH_PAT secret, so the token cannot be stored automatically."
+            echo "It stays valid for ${{ steps.refresh.outputs.days }} more days."
+            exit 0
+          fi
+          printf '%s' "$NEW_TOKEN" | gh secret set IG_TOKEN --body-file -
+          echo "IG_TOKEN updated."
