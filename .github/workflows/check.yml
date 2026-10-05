@@ -1,0 +1,17 @@
+name: Check the connection
+
+# A dry run. It proves the token works and that Meta can fetch every slide of the
+# next post, then stops before publishing. Nothing appears on the profile.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage the next post without publishing it
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+        run: python3 publish.py --check

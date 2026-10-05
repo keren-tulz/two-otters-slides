@@ -97,6 +97,35 @@ def publish(post):
     return media_id
 
 
+def check():
+    """Prove the whole path works without putting anything on the profile.
+
+    Containers are staged and then simply abandoned; Meta drops an unpublished
+    container after 24 hours, and nothing appears on the account in the meantime.
+    """
+    me = call("GET", USER, fields="id,username,account_type")
+    print(f"token works: @{me.get('username')} ({me.get('account_type')})")
+
+    sched = json.loads((HERE / "schedule.json").read_text())
+    post = sched[0]
+    print(f"staging every slide of post {post['post']} without publishing")
+
+    children = []
+    for i, url in enumerate(post["slides"], 1):
+        r = call("POST", f"{USER}/media", image_url=url, is_carousel_item="true")
+        children.append(r["id"])
+        print(f"  slide {i:02d} accepted")
+    for i, cid in enumerate(children, 1):
+        wait_ready(cid, f"slide {i:02d}")
+    print(f"  all {len(children)} slides fetched and processed by Meta")
+
+    r = call("POST", f"{USER}/media", media_type="CAROUSEL",
+             children=",".join(children), caption=post["caption"])
+    wait_ready(r["id"], "carousel")
+    print(f"  carousel container {r['id']} is ready to publish")
+    print("\nstopping here on purpose. Nothing was posted.")
+
+
 def refresh_token():
     """Extend the 60 day token.
 
@@ -126,6 +155,10 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] == "--refresh":
         refresh_token()
+        raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--check":
+        check()
         raise SystemExit(0)
 
     sched = json.loads((HERE / "schedule.json").read_text())
