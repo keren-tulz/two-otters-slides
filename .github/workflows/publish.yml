@@ -1,11 +1,16 @@
 name: Publish the scheduled carousel
 
 # Runs on GitHub's servers, so nothing has to be open on anyone's machine.
-# It fires every day and publish.py decides whether anything is actually due,
-# which means a day that fails is simply picked up by the next run.
+# publish.py decides whether anything is actually due, so firing often is free:
+# every run but one prints "nothing due" and stops.
+#
+# Every two hours rather than once a day, because GitHub's scheduler is
+# best-effort and has been running this up to five hours behind the requested
+# time. Once a day, that delay lands the post at midnight Israel time; every two
+# hours, the first run after a post comes due picks it up.
 on:
   schedule:
-    - cron: "0 17 * * *"
+    - cron: "35 */2 * * *"
   workflow_dispatch:
     inputs:
       post:
@@ -51,8 +56,13 @@ jobs:
       # The Instagram token lasts 60 days and refreshing it resets the clock.
       # Storing the new one needs a token that may write secrets, so this step is
       # skipped when GH_PAT is not set and the run just says so.
+      #
+      # continue-on-error, because a failed refresh is a warning, not a failed
+      # post. Without it a healthy run that published nothing still goes red and
+      # hides whether the posting itself worked.
       - name: Keep the token alive
         if: always()
+        continue-on-error: true
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
