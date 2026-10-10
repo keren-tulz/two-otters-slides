@@ -6,11 +6,17 @@ Run with a post number to force one: `python3 publish.py 4`.
 
 Two environment variables are needed:
   IG_USER_ID  the Instagram professional account id
-  IG_TOKEN    an Instagram user access token with instagram_business_content_publish
+  IG_TOKEN    a Facebook PAGE access token for Two-Otters.Studio, carrying
+              instagram_content_publish and instagram_basic
 
-The token comes from the Instagram-login flow, so the host is graph.instagram.com,
-not graph.facebook.com. Meta fetches each slide from its raw.githubusercontent URL,
-which is why this repository has to stay public until the last post goes out.
+The account is tied to a Facebook page, which is why this goes through
+graph.facebook.com and a page token rather than the Instagram-login flow. That
+flow refuses this account outright with "Access denied to the target Instagram
+account". A page token derived from a long-lived user token has no expiry, so
+there is nothing to renew.
+
+Meta fetches each slide from its raw.githubusercontent URL, which is why this
+repository has to stay public until the last post goes out.
 
 Everything about what goes out lives in schedule.json next to this file.
 published.json records what already went, and the workflow commits it back, so a
@@ -26,7 +32,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-API = "https://graph.instagram.com/v23.0"
+API = "https://graph.facebook.com/v23.0"
 HERE = pathlib.Path(__file__).parent
 STATE = HERE / "published.json"
 
@@ -103,8 +109,8 @@ def describe_token():
     Length and prefix are enough to tell an Instagram token from an app secret or
     a half-copied string. The value itself is never printed.
     """
-    kind = "looks like an Instagram login token" if TOKEN.startswith("IG") else \
-           "does NOT start with IG, so it is probably not an Instagram login token"
+    kind = "looks like a Meta access token" if TOKEN.startswith("EAA") else \
+           "does NOT start with EAA, so it is probably not an access token at all"
     print(f"IG_USER_ID is {len(USER)} characters, starts with {USER[:4]}")
     print(f"IG_TOKEN is {len(TOKEN)} characters and {kind}")
 
@@ -116,8 +122,9 @@ def check():
     container after 24 hours, and nothing appears on the account in the meantime.
     """
     describe_token()
-    me = call("GET", USER, fields="id,username,account_type")
-    print(f"token works: @{me.get('username')} ({me.get('account_type')})")
+    me = call("GET", USER, fields="id,username")
+    print(f"token works, reaching @{me.get('username')}")
+    token_status()
 
     sched = json.loads((HERE / "schedule.json").read_text())
     post = sched[0]
@@ -139,27 +146,25 @@ def check():
     print("\nstopping here on purpose. Nothing was posted.")
 
 
-def refresh_token():
-    """Extend the 60 day token.
+def token_status():
+    """Report how healthy the stored token is, without printing any of it.
 
-    The new token goes to a file rather than to stdout, so it never lands in a
-    workflow log. The workflow pipes that file into `gh secret set` and deletes it.
+    A page token derived from a long-lived user token has no expiry, so there is
+    nothing to renew. This only exists to say so out loud, and to warn early if
+    the token stored is the wrong kind and will lapse mid-schedule.
     """
-    body = urllib.parse.urlencode({"grant_type": "ig_refresh_token",
-                                   "access_token": TOKEN})
-    req = urllib.request.Request(
-        f"https://graph.instagram.com/refresh_access_token?{body}")
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            fresh = json.load(r)
-    except urllib.error.HTTPError as e:
-        raise SystemExit(f"refresh failed {e.code}\n{e.read().decode()[:400]}")
-
-    days = int(fresh.get("expires_in", 0)) // 86400
-    out = HERE / ".new_token"
-    out.write_text(fresh["access_token"])
-    out.chmod(0o600)
-    print(f"token refreshed, valid for another {days} days")
+    info = call("GET", "debug_token", input_token=TOKEN).get("data", {})
+    if not info.get("is_valid"):
+        print("WARNING: Meta reports this token as not valid.")
+        return
+    expires = info.get("expires_at")
+    if expires:
+        when = datetime.datetime.fromtimestamp(expires, datetime.timezone.utc)
+        left = when - datetime.datetime.now(datetime.timezone.utc)
+        print(f"WARNING: this token expires {when:%Y-%m-%d %H:%M} UTC, "
+              f"in {left.days} days. Replace it before then.")
+    else:
+        print(f"token is a {info.get('type', 'unknown')} token with no expiry")
 
 
 if __name__ == "__main__":
@@ -168,8 +173,8 @@ if __name__ == "__main__":
     USER = os.environ["IG_USER_ID"].strip()
     TOKEN = os.environ["IG_TOKEN"].strip()
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--refresh":
-        refresh_token()
+    if len(sys.argv) > 1 and sys.argv[1] == "--status":
+        token_status()
         raise SystemExit(0)
 
     if len(sys.argv) > 1 and sys.argv[1] == "--check":

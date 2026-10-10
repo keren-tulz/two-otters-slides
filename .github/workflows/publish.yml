@@ -53,26 +53,16 @@ jobs:
             git push
           fi
 
-      # The Instagram token lasts 60 days and refreshing it resets the clock.
-      # Storing the new one needs a token that may write secrets, so this step is
-      # skipped when GH_PAT is not set and the run just says so.
+      # A page token derived from a long-lived user token has no expiry, so there
+      # is nothing to renew. This only says so out loud, and warns early if the
+      # stored token turns out to be the kind that does lapse.
       #
-      # continue-on-error, because a failed refresh is a warning, not a failed
-      # post. Without it a healthy run that published nothing still goes red and
-      # hides whether the posting itself worked.
-      - name: Keep the token alive
+      # continue-on-error, because this is a report. Without it a healthy run
+      # that published nothing could still go red and hide whether posting worked.
+      - name: Report on the token
         if: always()
         continue-on-error: true
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          python3 publish.py --refresh
-          if [ -z "$GH_TOKEN" ]; then
-            echo "No GH_PAT secret, so the refreshed token cannot be stored."
-            echo "Replace IG_TOKEN by hand before the days above run out."
-          else
-            gh secret set IG_TOKEN < .new_token && echo "IG_TOKEN updated."
-          fi
-          rm -f .new_token
+        run: python3 publish.py --status
