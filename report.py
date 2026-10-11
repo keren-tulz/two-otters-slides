@@ -41,13 +41,21 @@ def graph(path, **params):
         return {"error": str(e)}
 
 
+_stats_cache = {}
+
+
 def media_stats(media_id):
     """Insights for one post, skipping whatever this account cannot report.
+
+    Cached, because every post appears both in this week's section and in the
+    all-time table, and without this each one is fetched twice.
 
     Refusals are printed to the run log rather than into the report. A post only
     hours old genuinely has nothing yet, and that looks identical to a metric
     Meta has renamed, so the reason needs to be somewhere we can read it.
     """
+    if media_id in _stats_cache:
+        return _stats_cache[media_id]
     out = {}
     for metric in MEDIA_METRICS:
         r = graph(f"{media_id}/insights", metric=metric)
@@ -57,6 +65,7 @@ def media_stats(media_id):
         for row in r.get("data", []):
             values = row.get("values") or [{}]
             out[row["name"]] = values[0].get("value")
+    _stats_cache[media_id] = out
     return out
 
 
