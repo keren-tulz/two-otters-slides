@@ -42,10 +42,18 @@ def graph(path, **params):
 
 
 def media_stats(media_id):
-    """Insights for one post, skipping whatever this account cannot report."""
+    """Insights for one post, skipping whatever this account cannot report.
+
+    Refusals are printed to the run log rather than into the report. A post only
+    hours old genuinely has nothing yet, and that looks identical to a metric
+    Meta has renamed, so the reason needs to be somewhere we can read it.
+    """
     out = {}
     for metric in MEDIA_METRICS:
         r = graph(f"{media_id}/insights", metric=metric)
+        if r.get("error"):
+            print(f"  {media_id} {metric}: {r['error']}")
+            continue
         for row in r.get("data", []):
             values = row.get("values") or [{}]
             out[row["name"]] = values[0].get("value")
