@@ -4,10 +4,13 @@
 Run with no arguments and it publishes everything that is due and not yet out.
 Run with a post number to force one: `python3 publish.py 4`.
 
-Two environment variables are needed:
-  IG_USER_ID  the Instagram professional account id
-  IG_TOKEN    a Facebook PAGE access token for Two-Otters.Studio, carrying
-              instagram_content_publish and instagram_basic
+Environment:
+  IG_USER_ID      the Instagram professional account id
+  IG_TOKEN        a Facebook PAGE access token for Two-Otters.Studio, carrying
+                  instagram_content_publish and instagram_basic
+  CLICKUP_TOKEN   optional. With it, each caption is read from its ClickUp task
+                  at publish time, so editing the task is enough to change what
+                  goes out. Without it, the copy in schedule.json is used.
 
 The account is tied to a Facebook page, which is why this goes through
 graph.facebook.com and a page token rather than the Instagram-login flow. That
@@ -31,6 +34,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+import clickup
 
 API = "https://graph.facebook.com/v23.0"
 HERE = pathlib.Path(__file__).parent
@@ -65,10 +70,36 @@ def wait_ready(container_id, label, tries=45):
     raise SystemExit(f"{label} never finished processing")
 
 
+def caption_for(post):
+    """The caption to post, preferring whatever is in ClickUp right now.
+
+    ClickUp is where the copy is written and edited, so an edit there has to
+    reach Instagram without anyone touching this repository. The copy stored in
+    schedule.json is the fallback, used when CLICKUP_TOKEN is unset or ClickUp
+    cannot be reached, so neither of those can cost us a post.
+
+    Hashtags live only here, never in the task, so they survive either way.
+    """
+    fresh = clickup.fetch_caption(post.get("clickup_task"), CLICKUP_TOKEN)
+    if fresh:
+        body, source = fresh, "ClickUp"
+    else:
+        body, source = post.get("caption"), "schedule.json"
+    if not body:
+        return None, source
+    tags = post.get("hashtags")
+    return (f"{body}\n\n{tags}" if tags else body), source
+
+
 def publish(post):
-    n, slides, caption = post["post"], post["slides"], post["caption"]
+    n, slides = post["post"], post["slides"]
+    caption, source = caption_for(post)
     if not caption:
         raise SystemExit(f"post {n} has no caption yet, refusing to publish it")
+    print(f"  caption from {source}, {len(caption)} characters")
+    if len(caption) > 2200:
+        raise SystemExit(f"post {n} caption is {len(caption)} characters, "
+                         "over Instagram's 2200 limit")
 
     if len(slides) == 1:
         # A one-image post is a plain image, not a carousel of one.
@@ -128,6 +159,9 @@ def check():
 
     sched = json.loads((HERE / "schedule.json").read_text())
     post = sched[0]
+    caption, source = caption_for(post)
+    print(f"caption for post {post['post']} comes from {source}, "
+          f"{len(caption or '')} characters")
     print(f"staging every slide of post {post['post']} without publishing")
 
     children = []
@@ -140,7 +174,7 @@ def check():
     print(f"  all {len(children)} slides fetched and processed by Meta")
 
     r = call("POST", f"{USER}/media", media_type="CAROUSEL",
-             children=",".join(children), caption=post["caption"])
+             children=",".join(children), caption=caption)
     wait_ready(r["id"], "carousel")
     print(f"  carousel container {r['id']} is ready to publish")
     print("\nstopping here on purpose. Nothing was posted.")
@@ -172,6 +206,8 @@ if __name__ == "__main__":
     # stray newline is enough for Meta to answer "cannot parse access token".
     USER = os.environ["IG_USER_ID"].strip()
     TOKEN = os.environ["IG_TOKEN"].strip()
+    # Optional. Without it every caption comes from schedule.json instead.
+    CLICKUP_TOKEN = os.environ.get("CLICKUP_TOKEN", "").strip() or None
 
     if len(sys.argv) > 1 and sys.argv[1] == "--status":
         token_status()

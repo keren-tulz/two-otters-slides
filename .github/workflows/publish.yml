@@ -34,6 +34,8 @@ jobs:
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          # optional: with it, captions are read from ClickUp at publish time
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
           # kept out of the command line: an input must never be interpolated into `run`
           FORCE_POST: ${{ github.event.inputs.post }}
         run: |
