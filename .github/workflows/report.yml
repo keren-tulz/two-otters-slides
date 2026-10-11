@@ -1,0 +1,35 @@
+name: Weekly report
+
+# Sunday morning, before the day's carousel goes out at 17:00, so the report
+# covers the week that just finished rather than half of the next one.
+on:
+  schedule:
+    - cron: "40 5 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gather the numbers
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+          CLICKUP_LIST: ${{ secrets.CLICKUP_LIST }}
+        run: python3 report.py
+
+      - name: Keep it
+        run: |
+          if [ -n "$(git status --porcelain reports)" ]; then
+            git config user.name "two-otters-bot"
+            git config user.email "noreply@github.com"
+            git add reports
+            git commit -m "Report for $(date -u +%F)"
+            git push
+          fi

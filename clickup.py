@@ -19,14 +19,31 @@ API = "https://api.clickup.com/api/v2/task"
 # "## קאפשן", "**Caption**", "**Caption** - rewritten so ...", "## Caption:"
 # Every gap here is [ \t] rather than \s, because \s would swallow the newline
 # after the heading and eat the caption's own first line with it.
+#
+# The markers are optional: ClickUp's plain description drops them, so there the
+# heading is a bare line reading just "קאפשן". That is why an unmarked heading
+# has to be the whole line, or every mention of the word inside the copy would
+# look like one.
 HEADING = re.compile(
-    r"^[ \t]*(?:#{1,6}[ \t]*|\*\*)[ \t]*(?:קאפשן|caption)[ \t]*:?[ \t]*"
-    r"(?:\*\*)?[^\n]*$",
+    r"^[ \t]*(?:"
+    r"(?:#{1,6}[ \t]*|\*\*)[ \t]*(?:קאפשן|caption)[ \t]*:?[ \t]*(?:\*\*)?[^\n]*"
+    r"|"
+    r"(?:קאפשן|caption)[ \t]*:?[ \t]*"
+    r")$",
     re.IGNORECASE | re.MULTILINE,
 )
-# A horizontal rule in any of the spellings ClickUp emits, or the next heading.
-STOP = re.compile(r"^[ \t]*(?:\*[ \t]*\*[ \t]*\*|-{3,}|_{3,}|#{1,6}[ \t]+\S)",
-                  re.MULTILINE)
+# Where the caption ends: a horizontal rule in any of the spellings ClickUp
+# emits, the next heading, or one of the section titles used in these tasks.
+# The bare titles matter only for the plain-text description, which carries no
+# rules or hashes at all.
+SECTIONS = ("הערות עיצוב", "תוכן השקפים", "תוכן השקף",
+            "slides", "notes", "the graphic", "pinned first comment")
+STOP = re.compile(
+    r"^[ \t]*(?:"
+    r"\*[ \t]*\*[ \t]*\*|-{3,}|_{3,}|#{1,6}[ \t]+\S"
+    r"|(?:\*\*)?(?:" + "|".join(re.escape(s) for s in SECTIONS) + r")\b[^\n]*"
+    r")$",
+    re.IGNORECASE | re.MULTILINE)
 
 
 def strip_markdown(text):
@@ -61,8 +78,11 @@ def fetch_caption(task_id, token, timeout=20):
     """
     if not (task_id and token):
         return None
-    req = urllib.request.Request(f"{API}/{task_id}",
-                                 headers={"Authorization": token})
+    # Without include_markdown_description ClickUp returns only the plain text,
+    # which has no headings or rules left in it and is far harder to cut cleanly.
+    req = urllib.request.Request(
+        f"{API}/{task_id}?include_markdown_description=true",
+        headers={"Authorization": token})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             task = json.load(r)
