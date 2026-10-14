@@ -91,3 +91,20 @@ def fetch_caption(task_id, token, timeout=20):
         return None
     return extract_caption(task.get("markdown_description")
                            or task.get("description"))
+
+
+def comment(task_id, token, text, timeout=20):
+    """Leave a note on the task. Never raises: a post is not worth failing over."""
+    if not (task_id and token):
+        return False
+    req = urllib.request.Request(
+        f"{API}/{task_id}/comment",
+        data=json.dumps({"comment_text": text, "notify_all": True}).encode(),
+        headers={"Authorization": token, "Content-Type": "application/json"},
+        method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True
+    except Exception as e:
+        print(f"  could not comment in ClickUp: {e}")
+        return False

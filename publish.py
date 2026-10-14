@@ -131,6 +131,13 @@ def publish(post):
     if first:
         call("POST", f"{media_id}/comments", message=first)
         print("  first comment posted")
+
+    # Say so in ClickUp. Posts go out in the evening in Israel, which is the
+    # middle of the night where Keren is, so the only way she knows a post
+    # landed is if something tells her.
+    link = call("GET", media_id, fields="permalink").get("permalink", "")
+    clickup.comment(post.get("clickup_task"), CLICKUP_TOKEN,
+                    f"Published on Instagram. {link}".strip())
     return media_id
 
 
