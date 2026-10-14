@@ -9,12 +9,16 @@ name: Publish the scheduled carousel
 # between runs. A post timed for the evening could land the following morning.
 #
 # So the attempts are concentrated where they matter. Every 15 minutes through
-# the posting window on Sundays and Wednesdays gives twenty chances to catch a
-# 17:00 slot, which survives even that drop rate. The four-hourly line is the
-# safety net that picks up anything the window still missed.
+# the posting window on Sundays and Wednesdays gives enough chances to catch the
+# slot even at that drop rate. The four-hourly line is the safety net that picks
+# up anything the window still missed.
+#
+# The window runs 16:00 to 21:00 UTC because the posts are pinned to 20:00 in
+# Israel, which is 17:00 UTC in summer and 18:00 UTC once the clocks go back on
+# 25 October. Cron has no notion of a timezone, so the window has to cover both.
 on:
   schedule:
-    - cron: "*/15 16-20 * * 0,3"
+    - cron: "*/15 16-21 * * 0,3"
     - cron: "25 */4 * * *"
   workflow_dispatch:
     inputs:
