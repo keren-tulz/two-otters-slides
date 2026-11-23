@@ -124,6 +124,10 @@ if __name__ == "__main__":
         if not pending:
             print("every reel is already out")
             raise SystemExit(0)
+        # `--check studio-1` stages that reel; without an id, the next one that has a video.
+        only = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
+        if only:
+            pending = [r for r in pending if r["id"] == only]
         container = next((c for c in map(stage, pending) if c), None)
         if not container:
             raise SystemExit("no pending reel has its video uploaded")

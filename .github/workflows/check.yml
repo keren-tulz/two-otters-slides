@@ -4,6 +4,10 @@ name: Check the connection
 # next post, then stops before publishing. Nothing appears on the profile.
 on:
   workflow_dispatch:
+    inputs:
+      reel:
+        description: "Stage one reel by id, e.g. studio-1. Leave empty for the next reel."
+        required: false
 
 jobs:
   check:
@@ -20,4 +24,11 @@ jobs:
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
-        run: python3 reels.py --check
+          # kept out of the command line: an input must never be interpolated into `run`
+          REEL: ${{ github.event.inputs.reel }}
+        run: |
+          case "$REEL" in
+            ""|tip-[A-T]|remake-[0-9][0-9]|studio-[1-9]) ;;
+            *) echo "not a reel id"; exit 1 ;;
+          esac
+          python3 reels.py --check $REEL
