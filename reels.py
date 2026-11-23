@@ -29,6 +29,7 @@ UPLOAD = "https://rupload.facebook.com/ig-api-upload/v23.0"
 REPO = "keren-tulz/two-otters-slides"
 ASSETS = f"https://github.com/{REPO}/releases/download/reels"
 RAW = f"https://raw.githubusercontent.com/{REPO}/main"
+DIRECT_LIMIT = 28_000_000
 HERE = pathlib.Path(__file__).parent
 STATE = HERE / "published.json"
 
@@ -75,10 +76,20 @@ def stage(reel):
         return None
     print(f"{reel['id']}: {len(video) / 1e6:.1f} MB downloaded")
 
-    params = {"media_type": "REELS", "upload_type": "resumable",
-              "caption": caption, "share_to_feed": "true"}
+    params = {"media_type": "REELS", "caption": caption, "share_to_feed": "true"}
     if reel.get("cover"):
         params["cover_url"] = f"{RAW}/{reel['cover']}"
+
+    # Meta's upload endpoint refused every file over about 30 MB in testing
+    # ("ProcessingFailedError"), while smaller ones went through. Larger videos
+    # are handed over as a URL instead, and Meta fetches the release asset itself.
+    if len(video) > DIRECT_LIMIT:
+        params["video_url"] = f"{ASSETS}/{urllib.parse.quote(reel['asset'])}"
+        container = call("POST", f"{USER}/media", **params)["id"]
+        print("  handed to Meta as a URL")
+        return wait_processed(container, reel)
+
+    params["upload_type"] = "resumable"
     container = call("POST", f"{USER}/media", **params)["id"]
 
     req = urllib.request.Request(
@@ -93,7 +104,10 @@ def stage(reel):
     if not ok:
         raise SystemExit("Meta did not confirm the upload")
     print("  uploaded")
+    return wait_processed(container, reel)
 
+
+def wait_processed(container, reel):
     for _ in range(90):
         s = call("GET", container, fields="status_code,status")
         if s.get("status_code") == "FINISHED":
