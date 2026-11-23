@@ -16,3 +16,8 @@ jobs:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
           CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
         run: python3 publish.py --check
+      - name: Upload the next reel without publishing it
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+        run: python3 reels.py --check

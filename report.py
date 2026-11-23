@@ -82,6 +82,9 @@ def build():
         if (HERE / "published.json").exists() else {}
     sched = {str(p["post"]): p
              for p in json.loads((HERE / "schedule.json").read_text())}
+    if (HERE / "reels.json").exists():
+        for r in json.loads((HERE / "reels.json").read_text()):
+            sched[f"reel:{r['id']}"] = {"title": r["title"]}
 
     lines = [f"# Two Otters · week to {today:%d %b %Y}", ""]
 
